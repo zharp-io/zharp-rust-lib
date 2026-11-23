@@ -20,8 +20,9 @@ fn main() -> anyhow::Result<()> {
     match load(&path) {
         Ok(text) => println!("{} bytes", text.len()),
         Err(error) => {
+            // Reported once, with the stack of where the error was created.
             zharp::capture_anyhow(&error);
-            tracing::error!(error = ?error, "giving up");
+            eprintln!("{error:#}");
         }
     }
     Ok(())
