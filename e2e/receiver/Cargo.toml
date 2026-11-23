@@ -1,0 +1,16 @@
+[package]
+name = "receiver"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+# A stand-in for Zharp's OTLP endpoint: each request decoded to one JSON line in /out.
+[dependencies]
+opentelemetry-proto = { version = "0.33", default-features = false, features = ["gen-tonic-messages", "with-serde", "trace", "logs"] }
+prost = "0.14"
+flate2 = "1"
+serde_json = "1"
+axum = "0.8"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+
+[workspace]

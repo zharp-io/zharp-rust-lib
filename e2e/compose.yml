@@ -1,0 +1,101 @@
+# End to end, all in Docker: the apps send to a stand-in OTLP receiver that writes what arrives
+# to e2e/out/otlp.jsonl. See run.sh.
+x-rust: &rust
+  image: rust:latest
+  volumes:
+    - "..:/zharp"
+    - cargo-registry:/usr/local/cargo/registry
+  environment: &env
+    ZHARP_KEY: zpk_e2e
+    ZHARP_ENDPOINT: http://receiver:4318/api/v1/otlp
+    ZHARP_ENVIRONMENT: e2e
+  depends_on:
+    receiver: { condition: service_started }
+
+services:
+  receiver:
+    image: rust:latest
+    working_dir: /zharp/e2e/receiver
+    volumes: ["..:/zharp", "cargo-registry:/usr/local/cargo/registry", "receiver-target:/zharp/e2e/receiver/target", "./out:/out"]
+    command: sh -c 'cargo build -q --release && exec ./target/release/receiver'
+    healthcheck: { test: ["CMD", "bash", "-c", "echo > /dev/tcp/127.0.0.1/4318"], interval: 3s, retries: 200, start_period: 600s }
+
+  postgres:
+    image: postgres:16-alpine
+    environment: { POSTGRES_PASSWORD: shop, POSTGRES_DB: shop }
+    healthcheck: { test: ["CMD", "pg_isready", "-U", "postgres"], interval: 2s, retries: 30 }
+
+  mysql:
+    image: mysql:8.4
+    environment: { MYSQL_ROOT_PASSWORD: carts, MYSQL_DATABASE: carts }
+    healthcheck: { test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-pcarts"], interval: 3s, retries: 60 }
+
+  # Axum + SQLx on Postgres, a release build with line tables, ZHARP_LOGS on.
+  shop:
+    <<: *rust
+    working_dir: /zharp/e2e/shop
+    volumes: ["..:/zharp", "cargo-registry:/usr/local/cargo/registry", "shop-target:/zharp/e2e/shop/target"]
+    environment:
+      <<: *env
+      DATABASE_URL: postgres://postgres:shop@postgres/shop
+      ZHARP_LOGS: "true"
+    depends_on:
+      receiver: { condition: service_healthy }
+      postgres: { condition: service_healthy }
+    command: sh -c 'cargo build -q --release && exec ./target/release/shop'
+    ports: ["3290:3000"]
+    healthcheck: { test: ["CMD", "bash", "-c", "echo > /dev/tcp/127.0.0.1/3000"], interval: 3s, retries: 300, start_period: 900s }
+
+  # The same app built without line tables (what decision 2 is about).
+  shop-stripped:
+    <<: *rust
+    working_dir: /zharp/e2e/shop
+    volumes: ["..:/zharp", "cargo-registry:/usr/local/cargo/registry", "shop-stripped-target:/zharp/e2e/shop/target"]
+    environment:
+      <<: *env
+      DATABASE_URL: postgres://postgres:shop@postgres/shop
+      ZHARP_SERVICE: shop-stripped
+      CARGO_PROFILE_RELEASE_DEBUG: "false"
+    depends_on:
+      receiver: { condition: service_healthy }
+      postgres: { condition: service_healthy }
+    command: sh -c 'cargo build -q --release && exec ./target/release/shop'
+    ports: ["3291:3000"]
+    healthcheck: { test: ["CMD", "bash", "-c", "echo > /dev/tcp/127.0.0.1/3000"], interval: 3s, retries: 300, start_period: 900s }
+
+  # Actix Web + SQLx on MySQL.
+  carts:
+    <<: *rust
+    working_dir: /zharp/e2e/actix-mysql
+    volumes: ["..:/zharp", "cargo-registry:/usr/local/cargo/registry", "carts-target:/zharp/e2e/actix-mysql/target"]
+    environment:
+      <<: *env
+      DATABASE_URL: mysql://root:carts@mysql/carts
+    depends_on:
+      receiver: { condition: service_healthy }
+      mysql: { condition: service_healthy }
+    command: sh -c 'cargo build -q --release && exec ./target/release/carts'
+    ports: ["3292:8080"]
+    healthcheck: { test: ["CMD", "bash", "-c", "echo > /dev/tcp/127.0.0.1/8080"], interval: 3s, retries: 300, start_period: 900s }
+
+  # A command-line tool (the crate's `cli` example, a release build without line tables): run by
+  # run.sh with `docker compose run cli <args>`.
+  cli:
+    <<: *rust
+    working_dir: /zharp
+    volumes: ["..:/zharp", "cargo-registry:/usr/local/cargo/registry", "cli-target:/zharp/target"]
+    environment:
+      <<: *env
+      ZHARP_SERVICE: orders-cli
+    depends_on:
+      receiver: { condition: service_healthy }
+    entrypoint: ["sh", "-c", 'cargo build -q --release --example cli --features anyhow && exec ./target/release/examples/cli "$$@"', "cli"]
+    profiles: ["cli"]
+
+volumes:
+  cargo-registry: { external: true, name: zharp-rust-cargo }
+  receiver-target:
+  shop-target:
+  shop-stripped-target:
+  carts-target:
+  cli-target:

@@ -1,0 +1,16 @@
+[package]
+name = "carts"
+version = "0.3.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+zharp = { path = "../..", features = ["actix", "sqlx"] }
+actix-web = "4"
+sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio", "mysql"] }
+tracing = "0.1"
+
+[profile.release]
+debug = "line-tables-only"
+
+[workspace]

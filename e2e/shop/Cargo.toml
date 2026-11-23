@@ -1,0 +1,25 @@
+[package]
+name = "shop"
+version = "1.4.0"
+edition = "2024"
+publish = false
+
+# An Axum + SQLx (Postgres) service as `npm init zharp` sets one up: release builds with line
+# tables, the build ID helper in build.rs.
+[dependencies]
+zharp = { path = "../..", features = ["axum", "sqlx", "reqwest", "anyhow"] }
+axum = "0.8"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio", "postgres", "macros"] }
+reqwest = { version = "0.13", default-features = false }
+anyhow = "1"
+thiserror = "2"
+tracing = "0.1"
+
+[build-dependencies]
+zharp = { path = "../..", default-features = false }
+
+[profile.release]
+debug = "line-tables-only"
+
+[workspace]
