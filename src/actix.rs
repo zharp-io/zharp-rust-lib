@@ -159,7 +159,8 @@ where
             Ok(Poll::Ready(Ok(response))) => {
                 if let Some(span) = this.span.take() {
                     let status = response.status().as_u16();
-                    if status >= 500 {
+                    // Its one error: unless the request reported one already (say with tracing::error!).
+                    if status >= 500 && !span.request.failed.load(Ordering::Relaxed) {
                         if let Some(error) = response.response().error() {
                             let type_name = errors::type_from_debug(&format!(
                                 "{:?}",
@@ -188,7 +189,8 @@ where
             Ok(Poll::Ready(Err(error))) => {
                 if let Some(span) = this.span.take() {
                     let status = error.as_response_error().status_code().as_u16();
-                    if status >= 500 {
+                    // Its one error: unless the request reported one already (say with tracing::error!).
+                    if status >= 500 && !span.request.failed.load(Ordering::Relaxed) {
                         let type_name =
                             errors::type_from_debug(&format!("{:?}", error.as_response_error()))
                                 .unwrap_or_else(|| "actix_web::Error".into());

@@ -270,7 +270,21 @@ pub(crate) fn scrub(message: &str, _failure: &Failure) -> String {
     ] {
         text = mask(&text, before, open, close, after);
     }
-    text
+    // Postgres's own source line ("… \"users_email_key\" at line 666"): it says nothing about the
+    // app and differs between Postgres versions.
+    text.lines()
+        .map(without_server_line)
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn without_server_line(line: &str) -> &str {
+    match line.rfind(" at line ") {
+        Some(i) if i + 9 < line.len() && line[i + 9..].bytes().all(|b| b.is_ascii_digit()) => {
+            &line[..i]
+        }
+        _ => line,
+    }
 }
 
 /// Each quoted value after `before` (the quote opening within a few words), up to a closing quote
@@ -355,6 +369,13 @@ mod tests {
                 &f
             ),
             "duplicate key value violates unique constraint \"users_email_key\""
+        );
+        assert_eq!(
+            scrub(
+                "error returned from database: duplicate key value violates unique constraint \"users_email_key\" at line 666",
+                &f
+            ),
+            "error returned from database: duplicate key value violates unique constraint \"users_email_key\""
         );
     }
 }
