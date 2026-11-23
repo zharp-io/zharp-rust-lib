@@ -1,0 +1,56 @@
+name: test
+
+on:
+  push:
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        rust: ["1.85", stable]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust }}
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+      # SQLx 0.9 itself needs Rust 1.94: on 1.85 everything else is tested.
+      - if: matrix.rust == 'stable'
+        run: cargo test --all-features
+      - if: matrix.rust != 'stable'
+        run: cargo test --features axum,tower,actix,reqwest,anyhow
+      - name: Each feature alone
+        shell: bash
+        run: |
+          cargo check --lib --no-default-features
+          features=(sdk "sdk axum" "sdk tower" "sdk actix" "sdk reqwest" "sdk anyhow")
+          if [ "${{ matrix.rust }}" = stable ]; then features+=("sdk sqlx"); fi
+          for f in "${features[@]}"; do
+            echo "== $f"; cargo check --lib --no-default-features --features "$f"
+          done
+      - if: matrix.rust == 'stable'
+        run: cargo clippy --all-features --all-targets -- -D warnings
+      - if: matrix.rust == 'stable'
+        run: cargo fmt --check
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --all-features
+
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo package --allow-dirty
