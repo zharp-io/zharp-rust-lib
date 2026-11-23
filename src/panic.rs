@@ -59,7 +59,7 @@ fn report(info: &PanicHookInfo<'_>) {
     let headline = match info.location() {
         Some(at) => format!(
             "thread '{name}' panicked at {}:{}:{}:",
-            at.file(),
+            stack::slashes(at.file()),
             at.line(),
             at.column()
         ),

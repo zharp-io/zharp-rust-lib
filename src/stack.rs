@@ -26,7 +26,7 @@ pub(crate) fn parse(text: &str) -> Vec<Frame> {
         if let Some(location) = trimmed.strip_prefix("at ") {
             if let Some(last) = frames.last_mut() {
                 if last.location.is_none() {
-                    last.location = Some(location.trim().to_string());
+                    last.location = Some(slashes(location.trim()));
                 }
             }
             continue;
@@ -52,6 +52,16 @@ pub(crate) fn parse(text: &str) -> Vec<Frame> {
         }
     }
     frames
+}
+
+/// A path with `/` between its parts, as on Linux and macOS: Windows writes `.\src\cart.rs`, and
+/// Zharp matches a frame to the repository's `src/cart.rs` (and groups by it).
+pub(crate) fn slashes(path: &str) -> String {
+    if cfg!(windows) {
+        path.replace('\\', "/")
+    } else {
+        path.to_string()
+    }
 }
 
 pub(crate) fn capture() -> Vec<Frame> {
